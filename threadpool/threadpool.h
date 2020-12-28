@@ -32,6 +32,7 @@ private:
     bool m_stop;                //是否结束线程
     connection_pool *m_connPool;  //数据库
 };
+
 template <typename T>
 threadpool<T>::threadpool( connection_pool *connPool, int thread_number, int max_requests) : m_thread_number(thread_number), m_max_requests(max_requests), m_stop(false), m_threads(NULL),m_connPool(connPool)
 {
@@ -55,12 +56,14 @@ threadpool<T>::threadpool( connection_pool *connPool, int thread_number, int max
         }
     }
 }
+
 template <typename T>
 threadpool<T>::~threadpool()
 {
     delete[] m_threads;
     m_stop = true;
 }
+
 template <typename T>
 bool threadpool<T>::append(T *request)
 {
@@ -75,6 +78,7 @@ bool threadpool<T>::append(T *request)
     m_queuestat.post();
     return true;
 }
+
 template <typename T>
 void *threadpool<T>::worker(void *arg)
 {
@@ -82,6 +86,7 @@ void *threadpool<T>::worker(void *arg)
     pool->run();
     return pool;
 }
+
 template <typename T>
 void threadpool<T>::run()
 {
