@@ -13,26 +13,41 @@ class cstyle_threadpool
 private:
     int max_thread;
     int max_request;
-    pthread_t threadpool = pthread_t[max_thread];
+    pthread_t *threadpool;
     std::list<T*> workqueue;
     locker m_locker;
     sem m_sem;
     bool is_stop;
 
 private:
-    static void* worker(void* arg);
+    static void *worker(void* arg);
     void run();
 
 public:
-    cstyle_threadpool(int number_thread = 8, int number_request = 1000);
+    cstyle_threadpool(int number_thread, int number_request);
     ~cstyle_threadpool();
     bool append(T* request);
 };
 
 template <typename T>
-cstyle_threadpool<T>::cstyle_threadpool(int number_thread = 8, int number_request = 1000) {
+cstyle_threadpool<T>::cstyle_threadpool(int number_thread, int number_request) : max_thread(number_thread), max_request(number_request) {
     assert(number_thread > 0 && number_request > 0);
-
+    threadpool = new threadpool[max_thread];
+    if (!threadpool) {
+        throw std::exception();
+    }
+    for (int i = 0; i < max_thread; ++i) {
+        // 创建线程
+        if (pthread_create(threadpool+i, NULL, worker, this) != 0) {
+            delete [] threadpool;
+            throw std::exception();
+        }
+        // 主线程与子线程分离,子线程结束后,资源自动回收
+        if (pthread_detach(threadpool[i])) {
+            delete[] threadpool;
+            throw std::exception();
+        }
+    }
 }
 
 template <typename T>
