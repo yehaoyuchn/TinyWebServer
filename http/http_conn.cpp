@@ -4,11 +4,11 @@
 #include <mysql/mysql.h>
 #include <fstream>
 
-//#define connfdET //边缘触发非阻塞
-#define connfdLT //水平触发阻塞
+#define connfdET //边缘触发非阻塞
+// #define connfdLT //水平触发阻塞
 
-//#define listenfdET //边缘触发非阻塞
-#define listenfdLT //水平触发阻塞
+#define listenfdET //边缘触发非阻塞
+// #define listenfdLT //水平触发阻塞
 
 //定义http响应的一些状态信息
 const char *ok_200_title = "OK";
@@ -61,9 +61,10 @@ void http_conn::initmysql_result(connection_pool *connPool)
 //对文件描述符设置非阻塞
 int setnonblocking(int fd)
 {
-    int old_option = fcntl(fd, F_GETFL);
+    // fcntl()根据文件描述词来操作文件的特性
+    int old_option = fcntl(fd, F_GETFL); // 获得fd属性
     int new_option = old_option | O_NONBLOCK;
-    fcntl(fd, F_SETFL, new_option);
+    fcntl(fd, F_SETFL, new_option); // 设置fd属性
     return old_option;
 }
 
@@ -173,22 +174,31 @@ void http_conn::init()
 //返回值为行的读取状态，有LINE_OK,LINE_BAD,LINE_OPEN
 http_conn::LINE_STATUS http_conn::parse_line()
 {
+    // m_read_idx指向缓冲区m_read_buf的数据末尾的下一个字节
+    // m_checked_idx指向从状态机当前正在分析的字节
     char temp;
     for (; m_checked_idx < m_read_idx; ++m_checked_idx)
     {
+        // temp为将要分析的字节
         temp = m_read_buf[m_checked_idx];
+        // 如果当前是\r字符，则有可能会读取到完整行
         if (temp == '\r')
         {
+            // 下一个字符达到了buffer结尾，则接收不完整，需要继续接收
             if ((m_checked_idx + 1) == m_read_idx)
                 return LINE_OPEN;
+            // 下一个字符是\n，将\r\n改为\0\0
             else if (m_read_buf[m_checked_idx + 1] == '\n')
             {
                 m_read_buf[m_checked_idx++] = '\0';
                 m_read_buf[m_checked_idx++] = '\0';
                 return LINE_OK;
             }
+            // 如果都不符合，则返回语法错误
             return LINE_BAD;
         }
+        // 如果当前字符是\n，也有可能读取到完整行
+        // 一般是上次读取到\r就到buffer末尾了，没有接收完整，再次接收时会出现这种情况
         else if (temp == '\n')
         {
             if (m_checked_idx > 1 && m_read_buf[m_checked_idx - 1] == '\r')
@@ -353,6 +363,7 @@ http_conn::HTTP_CODE http_conn::parse_content(char *text)
 //
 http_conn::HTTP_CODE http_conn::process_read()
 {
+    // 初始化从状态机状态、HTTP请求解析结果
     LINE_STATUS line_status = LINE_OK;
     HTTP_CODE ret = NO_REQUEST;
     char *text = 0;
@@ -360,9 +371,13 @@ http_conn::HTTP_CODE http_conn::process_read()
     while ((m_check_state == CHECK_STATE_CONTENT && line_status == LINE_OK) || ((line_status = parse_line()) == LINE_OK))
     {
         text = get_line();
+        // m_start_line是每一个数据行在m_read_buf中的起始位置
+        // m_checked_idx表示从状态机在m_read_buf中读取的位置
         m_start_line = m_checked_idx;
         LOG_INFO("%s", text);
         Log::get_instance()->flush();
+
+        // 主状态机的三种状态转移逻辑
         switch (m_check_state)
         {
         case CHECK_STATE_REQUESTLINE:
@@ -702,15 +717,19 @@ bool http_conn::process_write(HTTP_CODE ret)
 void http_conn::process()
 {
     HTTP_CODE read_ret = process_read();
+    // NO_REQUEST，表示请求不完整，需要继续接收请求数据
     if (read_ret == NO_REQUEST)
     {
+        // 注册并监听读事件
         modfd(m_epollfd, m_sockfd, EPOLLIN);
         return;
     }
+    // 调用process_write完成报文响应
     bool write_ret = process_write(read_ret);
     if (!write_ret)
     {
         close_conn();
     }
+    // 注册并监听写事件
     modfd(m_epollfd, m_sockfd, EPOLLOUT);
 }

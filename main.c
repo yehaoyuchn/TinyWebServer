@@ -23,8 +23,8 @@
 #define SYNLOG  //同步写日志
 //#define ASYNLOG //异步写日志
 
-//#define listenfdET //边缘触发非阻塞
-#define listenfdLT //水平触发阻塞
+#define listenfdET //边缘触发非阻塞
+// #define listenfdLT //水平触发阻塞
 
 //这三个函数在http_conn.cpp中定义，改变链接属性
 extern int addfd(int epollfd, int fd, bool one_shot);
@@ -117,7 +117,8 @@ int main(int argc, char *argv[])
     {
         return 1;
     }
-
+    
+    // 创建MAX_FD个http类对象
     http_conn *users = new http_conn[MAX_FD];
     assert(users);
 
@@ -150,7 +151,9 @@ int main(int argc, char *argv[])
     epollfd = epoll_create(5);
     assert(epollfd != -1);
 
+    // 将listenfd放在epoll树上
     addfd(epollfd, listenfd, false);
+    // 将上述epollfd赋值给http类对象的m_epollfd属性
     http_conn::m_epollfd = epollfd;
 
     //创建管道
@@ -170,13 +173,14 @@ int main(int argc, char *argv[])
 
     while (!stop_server)
     {
+        // 等待所监控文件描述符上有事件的产生
         int number = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);
         if (number < 0 && errno != EINTR)
         {
             LOG_ERROR("%s", "epoll failure");
             break;
         }
-
+        // 对所有就绪事件进行处理
         for (int i = 0; i < number; i++)
         {
             int sockfd = events[i].data.fd;
@@ -186,6 +190,7 @@ int main(int argc, char *argv[])
             {
                 struct sockaddr_in client_address;
                 socklen_t client_addrlength = sizeof(client_address);
+
 #ifdef listenfdLT
                 int connfd = accept(listenfd, (struct sockaddr *)&client_address, &client_addrlength);
                 if (connfd < 0)
@@ -215,6 +220,7 @@ int main(int argc, char *argv[])
 #endif
 
 #ifdef listenfdET
+                // 需要循环接收数据
                 while (1)
                 {
                     int connfd = accept(listenfd, (struct sockaddr *)&client_address, &client_addrlength);
@@ -246,7 +252,7 @@ int main(int argc, char *argv[])
                 continue;
 #endif
             }
-
+            // 处理异常事件
             else if (events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR))
             {
                 //服务器端关闭连接，移除对应的定时器
@@ -297,6 +303,7 @@ int main(int argc, char *argv[])
             else if (events[i].events & EPOLLIN)
             {
                 util_timer *timer = users_timer[sockfd].timer;
+                // 读入对应缓冲区
                 if (users[sockfd].read_once())
                 {
                     LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
