@@ -609,52 +609,70 @@ bool http_conn::write()
 
 bool http_conn::add_response(const char *format, ...)
 {
+    // 如果写入内容超出m_write_buf大小则报错
     if (m_write_idx >= WRITE_BUFFER_SIZE)
         return false;
+    
+    // 定义可变参数列表
     va_list arg_list;
-    va_start(arg_list, format);
+    // 将变量arg_list初始化为传入参数
+    va_start(arg_list,format);
+    // 将数据format从可变参数列表写入缓冲区写，返回写入数据的长度
     int len = vsnprintf(m_write_buf + m_write_idx, WRITE_BUFFER_SIZE - 1 - m_write_idx, format, arg_list);
+    
+    // 如果写入的数据长度超过缓冲区剩余空间，则报错
     if (len >= (WRITE_BUFFER_SIZE - 1 - m_write_idx))
     {
         va_end(arg_list);
         return false;
     }
+
+    // 更新m_write_idx位置
     m_write_idx += len;
+    // 清空可变参列表
     va_end(arg_list);
     LOG_INFO("request:%s", m_write_buf);
     Log::get_instance()->flush();
     return true;
 }
+// 添加状态行
 bool http_conn::add_status_line(int status, const char *title)
 {
     return add_response("%s %d %s\r\n", "HTTP/1.1", status, title);
 }
+// 添加消息报头，具体的添加文本长度、连接状态和空行
 bool http_conn::add_headers(int content_len)
 {
     add_content_length(content_len);
     add_linger();
     add_blank_line();
 }
+// 添加Content-Length，表示响应报文的长度
 bool http_conn::add_content_length(int content_len)
 {
     return add_response("Content-Length:%d\r\n", content_len);
 }
+// 添加文本类型，这里是html
 bool http_conn::add_content_type()
 {
     return add_response("Content-Type:%s\r\n", "text/html");
 }
+// 添加连接状态，通知浏览器端是保持连接还是关闭
 bool http_conn::add_linger()
 {
     return add_response("Connection:%s\r\n", (m_linger == true) ? "keep-alive" : "close");
 }
+// 添加空行
 bool http_conn::add_blank_line()
 {
     return add_response("%s", "\r\n");
 }
+// 添加文本content
 bool http_conn::add_content(const char *content)
 {
     return add_response("%s", content);
 }
+
 bool http_conn::process_write(HTTP_CODE ret)
 {
     switch (ret)
